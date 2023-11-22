@@ -1,7 +1,7 @@
 #![warn(clippy::pedantic)]
 #![no_std]
 
-use core::ptr;
+use core::ptr::{self, NonNull};
 
 use alloc::{
     alloc::{handle_alloc_error, Layout, LayoutError},
@@ -26,12 +26,12 @@ where
     T: Clone,
 {
     unsafe {
-        let ptr = new_uninit()?;
-        for v in &mut *ptr {
+        let mut ptr = new_uninit()?;
+        for v in ptr.as_mut() {
             ptr::write(v, initial.clone());
         }
 
-        Ok(Box::from_raw(ptr))
+        Ok(Box::from_raw(ptr.as_ptr()))
     }
 }
 
@@ -51,12 +51,12 @@ where
     T: Default,
 {
     unsafe {
-        let ptr = new_uninit()?;
-        for v in &mut *ptr {
+        let mut ptr = new_uninit()?;
+        for v in ptr.as_mut() {
             ptr::write(v, T::default());
         }
 
-        Ok(Box::from_raw(ptr))
+        Ok(Box::from_raw(ptr.as_ptr()))
     }
 }
 
@@ -82,21 +82,20 @@ where
 /// use heap_arr::new_uninit;
 ///
 /// unsafe {
-///     let ptr = new_uninit::<usize, 16>().unwrap();
-///     for (i, v) in (*ptr).iter_mut().enumerate() {
+///     let mut ptr = new_uninit::<usize, 16>().unwrap();
+///     for (i, v) in ptr.as_mut().iter_mut().enumerate() {
 ///         ptr::write(v, i);
 ///     }
 ///
-///     let _ = Box::from_raw(ptr);
+///     let _ = Box::from_raw(ptr.as_ptr());
 /// }
 /// ```
-pub unsafe fn new_uninit<T, const N: usize>() -> Result<*mut [T; N], LayoutError> {
+pub unsafe fn new_uninit<T, const N: usize>() -> Result<NonNull<[T; N]>, LayoutError> {
     let layout = Layout::array::<T>(N)?;
     let ptr = alloc::alloc::alloc(layout);
 
-    if ptr.is_null() {
-        handle_alloc_error(layout);
+    match NonNull::new(ptr) {
+        Some(v) => Ok(v.cast()),
+        None => handle_alloc_error(layout),
     }
-
-    Ok(ptr.cast())
 }
