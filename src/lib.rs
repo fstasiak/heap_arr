@@ -21,7 +21,7 @@ extern crate alloc;
 ///
 /// # Errors
 /// See [`Layout::array`]
-pub unsafe fn new<T, const N: usize>(default: T) -> Result<Box<[T; N]>, LayoutError>
+pub unsafe fn new<T, const N: usize>(default: &T) -> Result<Box<[T; N]>, LayoutError>
 where
     T: Clone,
 {
