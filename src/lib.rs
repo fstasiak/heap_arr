@@ -25,14 +25,12 @@ pub unsafe fn new<T, const N: usize>(initial: &T) -> Result<Box<[T; N]>, LayoutE
 where
     T: Clone,
 {
-    unsafe {
         let mut ptr = new_uninit()?;
         for v in ptr.as_mut() {
             ptr::write(v, initial.clone());
         }
 
         Ok(Box::from_raw(ptr.as_ptr()))
-    }
 }
 
 /// Allocates `[T; N]` on the heap and initializes its entries to `T::default()`.
@@ -50,14 +48,12 @@ pub unsafe fn new_default<T, const N: usize>() -> Result<Box<[T; N]>, LayoutErro
 where
     T: Default,
 {
-    unsafe {
         let mut ptr = new_uninit()?;
         for v in ptr.as_mut() {
             ptr::write(v, T::default());
         }
 
         Ok(Box::from_raw(ptr.as_ptr()))
-    }
 }
 
 /// Allocates `[T; N]` on the heap.
