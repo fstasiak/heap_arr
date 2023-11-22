@@ -10,7 +10,7 @@ use alloc::{
 
 extern crate alloc;
 
-/// Allocates `[T; N]` on the heap and initializes its entries to `default`.
+/// Allocates `[T; N]` on the heap and initializes its entries to `initial`.
 ///
 /// For now, this function uses the global allocator. This will change once the
 /// [`Allocator`](core::alloc::Allocator) trait becomes stable.
@@ -21,14 +21,39 @@ extern crate alloc;
 ///
 /// # Errors
 /// See [`Layout::array`]
-pub unsafe fn new<T, const N: usize>(default: &T) -> Result<Box<[T; N]>, LayoutError>
+pub unsafe fn new<T, const N: usize>(initial: &T) -> Result<Box<[T; N]>, LayoutError>
 where
     T: Clone,
 {
     unsafe {
         let ptr = new_uninit()?;
         for v in &mut *ptr {
-            ptr::write(v, default.clone());
+            ptr::write(v, initial.clone());
+        }
+
+        Ok(Box::from_raw(ptr))
+    }
+}
+
+/// Allocates `[T; N]` on the heap and initializes its entries to `T::default()`.
+///
+/// For now, this function uses the global allocator. This will change once the
+/// [`Allocator`](core::alloc::Allocator) trait becomes stable.
+///
+/// # Safety
+/// The result of this function is undefined if `mem::size_of::<T>() == 0`, or
+/// if `N == 0`
+///
+/// # Errors
+/// See [`Layout::array`]
+pub unsafe fn new_default<T, const N: usize>() -> Result<Box<[T; N]>, LayoutError>
+where
+    T: Default,
+{
+    unsafe {
+        let ptr = new_uninit()?;
+        for v in &mut *ptr {
+            ptr::write(v, T::default());
         }
 
         Ok(Box::from_raw(ptr))
