@@ -2,5 +2,11 @@
 name = "heap_arr"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "Box<[T; N]> directly on the heap"
+repository = "https://github.com/fstasiak/heap_arr.git"
+keywords = ["heap", "array", "no_std"]
+categories = ["no-std"]
+readme = "readme.md"
 
 [dependencies]
