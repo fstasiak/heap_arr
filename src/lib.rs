@@ -100,15 +100,15 @@ pub unsafe fn new_uninit<T, const N: usize>() -> Result<NonNull<[T; N]>, LayoutE
 mod tests {
     #[test]
     fn test_default() {
-        let arr = unsafe { super::new::<u64, 1_000_000_000>(&0x1234_5678_1234_5678).unwrap() };
+        let arr = unsafe { super::new_default::<u64, 1_000_000_000>().unwrap() };
         assert_eq!(arr.len(), 1_000_000_000);
-        assert_eq!(arr[999_999_999], 0x1234_5678_1234_5678);
+        assert_eq!(arr[999_999_999], 0);
     }
 
     #[test]
     fn test_new() {
-        let arr = unsafe { super::new_default::<u64, 1_000_000_000>().unwrap() };
+        let arr = unsafe { super::new::<u64, 1_000_000_000>(&0x1234_5678_1234_5678).unwrap() };
         assert_eq!(arr.len(), 1_000_000_000);
-        assert_eq!(arr[999_999_999], 0);
+        assert_eq!(arr[999_999_999], 0x1234_5678_1234_5678);
     }
 }
