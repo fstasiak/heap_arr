@@ -1,7 +1,7 @@
 #![warn(clippy::pedantic)]
 #![no_std]
 
-use core::ptr::{self, NonNull};
+use core::mem::{self, MaybeUninit};
 
 use alloc::{
     alloc::{handle_alloc_error, Layout, LayoutError},
@@ -25,12 +25,12 @@ pub unsafe fn new<T, const N: usize>(initial: &T) -> Result<Box<[T; N]>, LayoutE
 where
     T: Clone,
 {
-    let mut ptr = new_uninit()?;
-    for v in ptr.as_mut() {
-        ptr::write(v, initial.clone());
+    let mut arr = new_uninit::<T, N>()?;
+    for v in arr.as_mut() {
+        v.write(initial.clone());
     }
 
-    Ok(Box::from_raw(ptr.as_ptr()))
+    Ok(mem::transmute(arr))
 }
 
 /// Allocates `[T; N]` on the heap and initializes its entries to `T::default()`.
@@ -48,25 +48,21 @@ pub unsafe fn new_default<T, const N: usize>() -> Result<Box<[T; N]>, LayoutErro
 where
     T: Default,
 {
-    let mut ptr = new_uninit()?;
-    for v in ptr.as_mut() {
-        ptr::write(v, T::default());
+    let mut arr = new_uninit::<T, N>()?;
+    for v in arr.as_mut() {
+        v.write(T::default());
     }
 
-    Ok(Box::from_raw(ptr.as_ptr()))
+    Ok(mem::transmute(arr))
 }
 
 /// Allocates `[T; N]` on the heap.
-///
-/// The caller is required to handle deallocation if he wants to avoid
-/// memory leaks.
 ///
 /// For now, this function uses the global allocator. This will change once the
 /// [`Allocator`](core::alloc::Allocator) trait becomes stable.
 ///
 /// # Safety
-/// - The elements are uninitialized
-/// - The result of this function is undefined if `mem::size_of::<T>() == 0`, or
+/// The result of this function is undefined if `mem::size_of::<T>() == 0`, or
 /// if `N == 0`
 ///
 /// # Errors
@@ -74,41 +70,47 @@ where
 ///
 /// # Examples
 /// ```
-/// use std::{alloc::{self, Layout}, ptr};
-/// use heap_arr::new_uninit;
+/// use std::mem;
 ///
 /// unsafe {
-///     let mut ptr = new_uninit::<usize, 16>().unwrap();
-///     for (i, v) in ptr.as_mut().iter_mut().enumerate() {
-///         ptr::write(v, i);
+///     const LEN: usize = 1024 * 1024 * 1024;
+///
+///     let mut arr = heap_arr::new_uninit::<usize, LEN>().unwrap();
+///     for (i, v) in arr.as_mut().iter_mut().enumerate() {
+///         v.write(i);
 ///     }
 ///
-///     let _ = Box::from_raw(ptr.as_ptr());
+///     let arr: Box::<[usize; LEN]> = mem::transmute(arr);
 /// }
 /// ```
-pub unsafe fn new_uninit<T, const N: usize>() -> Result<NonNull<[T; N]>, LayoutError> {
+pub unsafe fn new_uninit<T, const N: usize>() -> Result<Box<[MaybeUninit<T>; N]>, LayoutError> {
     let layout = Layout::array::<T>(N)?;
     let ptr = alloc::alloc::alloc(layout);
 
-    match NonNull::new(ptr) {
-        Some(v) => Ok(v.cast()),
-        None => handle_alloc_error(layout),
+    if ptr.is_null() {
+        handle_alloc_error(layout);
     }
+    Ok(Box::from_raw(ptr.cast()))
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_default() {
-        let arr = unsafe { super::new_default::<u64, 1_000_000_000>().unwrap() };
-        assert_eq!(arr.len(), 1_000_000_000);
-        assert_eq!(arr[999_999_999], 0);
+    fn test_new() {
+        let arr = unsafe { super::new::<Option<bool>, 1_000>(&Some(false)).unwrap() };
+        assert_eq!(arr.len(), 1_000);
+        assert_eq!(arr[999], Some(false));
     }
 
     #[test]
-    fn test_new() {
-        let arr = unsafe { super::new::<u64, 1_000_000_000>(&0x1234_5678_1234_5678).unwrap() };
-        assert_eq!(arr.len(), 1_000_000_000);
-        assert_eq!(arr[999_999_999], 0x1234_5678_1234_5678);
+    fn test_default() {
+        let arr = unsafe { super::new_default::<Option<bool>, 1_000>().unwrap() };
+        assert_eq!(arr.len(), 1_000);
+        assert_eq!(arr[999], None);
+    }
+
+    #[test]
+    fn test_uninit() {
+        let _ = unsafe { super::new_uninit::<u64, 1_000>().unwrap() };
     }
 }
