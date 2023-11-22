@@ -58,8 +58,8 @@ where
 
 /// Allocates `[T; N]` on the heap.
 ///
-/// The returned pointer is guaranteed to be non-null. The caller is required
-/// to handle deallocation if he wants to avoid memory leaks.
+/// The caller is required to handle deallocation if he wants to avoid
+/// memory leaks.
 ///
 /// For now, this function uses the global allocator. This will change once the
 /// [`Allocator`](core::alloc::Allocator) trait becomes stable.
