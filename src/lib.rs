@@ -25,12 +25,12 @@ pub unsafe fn new<T, const N: usize>(initial: &T) -> Result<Box<[T; N]>, LayoutE
 where
     T: Clone,
 {
-        let mut ptr = new_uninit()?;
-        for v in ptr.as_mut() {
-            ptr::write(v, initial.clone());
-        }
+    let mut ptr = new_uninit()?;
+    for v in ptr.as_mut() {
+        ptr::write(v, initial.clone());
+    }
 
-        Ok(Box::from_raw(ptr.as_ptr()))
+    Ok(Box::from_raw(ptr.as_ptr()))
 }
 
 /// Allocates `[T; N]` on the heap and initializes its entries to `T::default()`.
@@ -48,12 +48,12 @@ pub unsafe fn new_default<T, const N: usize>() -> Result<Box<[T; N]>, LayoutErro
 where
     T: Default,
 {
-        let mut ptr = new_uninit()?;
-        for v in ptr.as_mut() {
-            ptr::write(v, T::default());
-        }
+    let mut ptr = new_uninit()?;
+    for v in ptr.as_mut() {
+        ptr::write(v, T::default());
+    }
 
-        Ok(Box::from_raw(ptr.as_ptr()))
+    Ok(Box::from_raw(ptr.as_ptr()))
 }
 
 /// Allocates `[T; N]` on the heap.
@@ -93,5 +93,22 @@ pub unsafe fn new_uninit<T, const N: usize>() -> Result<NonNull<[T; N]>, LayoutE
     match NonNull::new(ptr) {
         Some(v) => Ok(v.cast()),
         None => handle_alloc_error(layout),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_default() {
+        let arr = unsafe { super::new::<u64, 1_000_000_000>(&0x1234_5678_1234_5678).unwrap() };
+        assert_eq!(arr.len(), 1_000_000_000);
+        assert_eq!(arr[999_999_999], 0x1234_5678_1234_5678);
+    }
+
+    #[test]
+    fn test_new() {
+        let arr = unsafe { super::new_default::<u64, 1_000_000_000>().unwrap() };
+        assert_eq!(arr.len(), 1_000_000_000);
+        assert_eq!(arr[999_999_999], 0);
     }
 }
