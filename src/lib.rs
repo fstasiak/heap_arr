@@ -40,7 +40,6 @@
 //!
 //! - `#![no_std]` compatible (uses `alloc` only)
 //! - Panic-safe initialization with automatic cleanup on drop
-//! - Zero unsafe surface area for `new_*` functions
 
 mod guard;
 
@@ -80,7 +79,7 @@ where
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
-/// `initial` by cloning it. For `T` that are not `Clone`, see [`new_copied`].
+/// `initial` by cloning it. For `T` that are `Copy`, see [`new_copied`].
 ///
 /// # Examples
 /// ```
@@ -201,7 +200,7 @@ where
 /// let mut arr = heap_arr::uninit::<u64, 1000>();
 /// // SAFETY: We must ensure to initialize all entries before using the array
 /// for v in &mut *arr {
-///     unsafe { v.write(11) };
+///     v.write(11);
 /// }
 ///
 /// let arr = unsafe { heap_arr::assume_init(arr) };
@@ -226,7 +225,7 @@ pub fn uninit<T, const N: usize>() -> Box<[MaybeUninit<T>; N]> {
 ///
 /// // SAFETY: We must ensure to initialize all entries before using the array
 /// for v in &mut *arr {
-///     unsafe { v.write(11) };
+///     v.write(11);
 /// }
 ///
 /// // All entries of `arr` are initialized at this point, so it's safe to transmute it
