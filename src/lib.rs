@@ -1,5 +1,46 @@
 #![warn(clippy::pedantic)]
 #![no_std]
+//! Allocate fixed-size arrays directly on the heap.
+//!
+//! # The Problem
+//!
+//! In Rust, `Box::new([T; N])` allocates on the stack first, then moves to the
+//! heap. For large arrays, this can overflow the stack. Rust's optimizer
+//! should handle this in optimized builds, but not in debug.
+//!
+//! # The Solution
+//!
+//! This crate allocates `[T; N]` directly on the heap, skipping the intermediate stack allocation.
+//!
+//! # Example
+//!
+//! ```
+//! const SIZE: usize = 1_000_000_000;
+//! // This would overflow the stack in debug mode:
+//! // let arr = Box::new([0u8; SIZE]);
+//!
+//! // This works everywhere:
+//! let arr: Box<[u8; SIZE]> = heap_arr::new_copied(&0u8);
+//! assert_eq!(arr[0], 0);
+//! ```
+//!
+//! # API
+//!
+//! - [`new_copied`] – Allocate and fill by copying a value (for `T: Copy`)
+//! - [`new_cloned`] – Allocate and fill by cloning a value (for `T: Clone`)
+//! - [`new_default`] – Allocate and fill with `T::default()`
+//! - [`from_fn`] – Initialize via a closure
+//! - [`try_from_fn`] – Initialize with a fallible closure
+//! - [`uninit`] – Allocate uninitialized memory
+//! - [`assume_init`] – Transmute uninitialized memory (unsafe)
+//!
+//! All functions return `Box<[T; N]>` compatible with standard library code.
+//!
+//! # Features
+//!
+//! - `#![no_std]` compatible (uses `alloc` only)
+//! - Panic-safe initialization with automatic cleanup on drop
+//! - Zero unsafe surface area for `new_*` functions
 
 mod guard;
 

@@ -1,21 +1,25 @@
-# Heap Array (heap_arr)
+# heap_arr
 
-The Heap Array crate is a lightweight `#![no_std]` library designed to facilitate
-the construction of arrays directly on the heap.
+Allocate fixed-size arrays directly on the heap. For `#![no_std]` environments too.
 
-The provided functions within this crate enable the creation of both initialized
-and uninitialized arrays.
+## The Problem
 
-## Rationale
+In Rust, `Box::new([T; N])` allocates on the stack first, then moves to the
+heap. For large arrays, this can overflow the stack. Rust's optimizer should
+handle this in optimized builds, but not in debug.
 
-In certain scenarios, such as attempting to create a large array using
-`Box::new([0_u8; 1_000_000_000])`, Rust defaults to creating the array on the
-stack before moving it to the heap. This method poses a challenge for large
-arrays as it can lead to stack overflow. While Rust optimizes this process in
-`release` mode by directly allocating the array on the heap, there are
-situations, such as frequent recompilations during testing in `debug` mode,
-where this optimization is not viable.
+## The Solution
 
-The Heap Array crate addresses these challenges by providing a mechanism to
-create arrays directly on the heap, offering a more flexible solution for
-scenarios where stack limitations or debugging requirements come into play.
+```rust
+// Instead of this:
+let arr = Box::new([0_u8; 1_000_000_000]); // Stack overflow in debug
+
+// Use this:
+let arr: Box<[u8; 1_000_000_000]> = heap_arr::new_copied(&0_u8); // Allocates directly on heap
+```
+
+Fill arrays via `new_cloned()`, `new_default()`, `from_fn()`, `try_from_fn()`,
+or grab uninitialized memory with `uninit()` and initialize it yourself.
+
+Everything works in terms of `Box<[T; N]>` like the standard library.
+No dependencies outside `alloc`, and works in `#![no_std]`.
