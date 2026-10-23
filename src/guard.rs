@@ -1,4 +1,5 @@
 use core::mem::{self, MaybeUninit};
+use core::ptr;
 
 extern crate alloc;
 
@@ -36,18 +37,25 @@ impl<'a, T, const N: usize> Guard<'a, T, N> {
 
 impl<T, const N: usize> Drop for Guard<'_, T, N> {
     fn drop(&mut self) {
-        // Safety: We are dropping all initialized entries
-        for i in 0..self.initialized {
-            unsafe { self.array.get_unchecked_mut(i).assume_init_drop() };
-        }
+        let initialized =
+            ptr::slice_from_raw_parts_mut(self.array.as_mut_ptr().cast::<T>(), self.initialized);
+
+        // SAFETY: The prefix contains initialized values with exclusive access;
+        // the backing MaybeUninit array will not drop them again.
+        unsafe { ptr::drop_in_place(initialized) };
     }
 }
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::Guard;
     use crate::box_ext::BoxExt;
+    use alloc::rc::Rc;
+    use core::cell::Cell;
     use core::sync::atomic::{AtomicUsize, Ordering};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
     fn init_tracking() {
@@ -99,5 +107,101 @@ mod tests {
         }
 
         assert_eq!(DROPS.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn empty_prefix_cleanup() {
+        struct MustNotDrop;
+
+        impl Drop for MustNotDrop {
+            fn drop(&mut self) {
+                panic!("no elements were initialized");
+            }
+        }
+
+        let result = crate::try_from_fn::<MustNotDrop, _, 5, _>(|_| Err("initialization failed"));
+
+        assert!(matches!(result, Err("initialization failed")));
+    }
+
+    #[test]
+    fn partial_drop_cleanup_zst() {
+        struct DropCounter;
+
+        static DROPS: AtomicUsize = AtomicUsize::new(0);
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                DROPS.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        assert_eq!(core::mem::size_of::<DropCounter>(), 0);
+        let result = crate::try_from_fn::<_, (), 5, _>(|index| match index {
+            3 => Err(()),
+            _ => Ok(DropCounter),
+        });
+
+        assert!(result.is_err());
+        assert_eq!(DROPS.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn partial_drop_cleanup_after_initializer_panics() {
+        struct DropCounter(Rc<Cell<usize>>);
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+
+        let drops = Rc::new(Cell::new(0));
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _ = crate::from_fn::<_, 5, _>(|index| {
+                assert!(index != 3, "intentional initializer panic");
+                DropCounter(Rc::clone(&drops))
+            });
+        }));
+
+        let panic = result.expect_err("initializer should panic");
+        assert_eq!(
+            panic.downcast_ref::<&str>(),
+            Some(&"intentional initializer panic")
+        );
+        assert_eq!(drops.get(), 3);
+        assert_eq!(Rc::strong_count(&drops), 1);
+    }
+
+    #[test]
+    fn partial_drop_cleanup_after_destructor_panics() {
+        struct DropTracker(Rc<Cell<usize>>);
+
+        impl Drop for DropTracker {
+            fn drop(&mut self) {
+                let count = self.0.get() + 1;
+                self.0.set(count);
+                assert!(count != 1, "intentional destructor panic");
+            }
+        }
+
+        let drops = Rc::new(Cell::new(0));
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _ = crate::try_from_fn::<_, (), 5, _>(|index| {
+                if index == 3 {
+                    return Err(());
+                }
+
+                Ok(DropTracker(Rc::clone(&drops)))
+            });
+        }));
+
+        let panic = result.expect_err("first destructor should panic");
+        assert_eq!(
+            panic.downcast_ref::<&str>(),
+            Some(&"intentional destructor panic")
+        );
+        assert_eq!(drops.get(), 3);
+        assert_eq!(Rc::strong_count(&drops), 1);
     }
 }
