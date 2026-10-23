@@ -46,6 +46,7 @@ impl<T, const N: usize> Drop for Guard<'_, T, N> {
 #[cfg(test)]
 mod tests {
     use super::Guard;
+    use crate::box_ext::BoxExt;
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -70,7 +71,7 @@ mod tests {
             guard.finalize();
         }
 
-        assert_eq!(*unsafe { crate::assume_init(array) }, [1, 2, 3]);
+        assert_eq!(*unsafe { array.assume_init() }, [1, 2, 3]);
     }
 
     #[test]

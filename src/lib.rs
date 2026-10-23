@@ -32,7 +32,7 @@
 //! - [`from_fn`] – Initialize via a closure
 //! - [`try_from_fn`] – Initialize with a fallible closure
 //! - [`uninit`] – Allocate uninitialized memory
-//! - [`assume_init`] – Transmute uninitialized memory (unsafe)
+//! - [`BoxExt::assume_init`] – Transmute uninitialized memory (unsafe)
 //!
 //! All functions return `Box<[T; N]>` compatible with standard library code.
 //!
@@ -41,12 +41,14 @@
 //! - `#![no_std]` compatible (uses `alloc` only)
 //! - Panic-safe initialization with automatic cleanup on drop
 
+mod box_ext;
 mod guard;
 
-use core::mem::{self, MaybeUninit};
+use core::mem::MaybeUninit;
 
 use alloc::boxed::Box;
 
+pub use crate::box_ext::BoxExt;
 use crate::guard::Guard;
 
 extern crate alloc;
@@ -75,7 +77,7 @@ where
     for v in &mut *array {
         v.write(*initial);
     }
-    unsafe { assume_init(array) }
+    unsafe { array.assume_init() }
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -103,7 +105,7 @@ where
     }
     unsafe { guard.finalize() };
 
-    unsafe { assume_init(array) }
+    unsafe { array.assume_init() }
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -128,7 +130,7 @@ where
     }
     unsafe { guard.finalize() };
 
-    unsafe { assume_init(array) }
+    unsafe { array.assume_init() }
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -156,7 +158,7 @@ where
     }
     unsafe { guard.finalize() };
 
-    unsafe { assume_init(array) }
+    unsafe { array.assume_init() }
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -189,7 +191,7 @@ where
     }
     unsafe { guard.finalize() };
 
-    unsafe { Ok(assume_init(array)) }
+    unsafe { Ok(array.assume_init()) }
 }
 
 /// Allocates `[T; N]` directly on the heap and leaves its entries
@@ -197,46 +199,20 @@ where
 ///
 /// # Examples
 /// ```
+/// use heap_arr::BoxExt;
+///
 /// let mut arr = heap_arr::uninit::<u64, 1000>();
 /// // SAFETY: We must ensure to initialize all entries before using the array
 /// for v in &mut *arr {
 ///     v.write(11);
 /// }
 ///
-/// let arr = unsafe { heap_arr::assume_init(arr) };
+/// let arr = unsafe { arr.assume_init() };
 /// ```
 #[must_use]
 pub fn uninit<T, const N: usize>() -> Box<[MaybeUninit<T>; N]> {
     // Safety: MaybeUninit<[T; N]> can safely be turned into [MaybeUninit<T>; N]
     unsafe { Box::new_uninit().assume_init() }
-}
-
-/// A helper function to transmute `Box<[MaybeUninit<T>; N]>` into
-/// `Box<[T; N]>`.
-///
-/// # Safety
-/// The caller must ensure that all entries of the input array are initialized
-///
-/// # Examples
-/// ```
-/// use std::mem::MaybeUninit;
-///
-/// let mut arr: Box<[MaybeUninit<u64>; 1000]> = heap_arr::uninit();
-///
-/// // SAFETY: We must ensure to initialize all entries before using the array
-/// for v in &mut *arr {
-///     v.write(11);
-/// }
-///
-/// // All entries of `arr` are initialized at this point, so it's safe to transmute it
-/// let arr = unsafe { heap_arr::assume_init(arr) };
-/// ```
-#[allow(clippy::unnecessary_box_returns)]
-#[must_use]
-pub unsafe fn assume_init<T, const N: usize>(arr: Box<[MaybeUninit<T>; N]>) -> Box<[T; N]> {
-    // Safety: `Box<[MaybeUninit<T>; N]>` and `Box<[T; N]>` have the same
-    // layout, and the caller ensures all entries of the former are initialized
-    unsafe { mem::transmute(arr) }
 }
 
 #[cfg(test)]
