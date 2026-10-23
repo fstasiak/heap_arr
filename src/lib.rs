@@ -72,15 +72,9 @@ pub fn new_copied<T, const N: usize>(initial: &T) -> Box<[T; N]>
 where
     T: Copy,
 {
-    // FIXME: This can be made better once the `maybe_uninit_fill` feature
-    // gets merged. https://github.com/rust-lang/rust/issues/117428
+    let mut array = uninit::<T, N>();
+    array.fill(MaybeUninit::new(*initial));
 
-    // No guard needed as `T: Copy` guarantees that the initialization
-    // is infallible
-    let mut array = uninit();
-    for v in &mut *array {
-        v.write(*initial);
-    }
     // SAFETY: Every element has been initialized by copying a valid T.
     unsafe { array.assume_init() }
 }

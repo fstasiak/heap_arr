@@ -17,6 +17,25 @@ fn new_copied() {
 }
 
 #[test]
+fn new_copied_does_not_clone() {
+    #[derive(Copy)]
+    struct CopyOnly(u8);
+
+    // Deliberately differs from Copy to detect accidental cloning.
+    #[allow(clippy::non_canonical_clone_impl, clippy::expl_impl_clone_on_copy)]
+    impl Clone for CopyOnly {
+        fn clone(&self) -> Self {
+            panic!("new_copied must not call T::clone");
+        }
+    }
+
+    let empty = heap_arr::new_copied::<_, 0>(&CopyOnly(7));
+    assert!(empty.is_empty());
+    let array = heap_arr::new_copied::<_, 4>(&CopyOnly(7));
+    assert!(array.iter().all(|value| value.0 == 7));
+}
+
+#[test]
 fn new_cloned() {
     const LEN: usize = 16;
 
