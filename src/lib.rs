@@ -95,17 +95,12 @@ pub fn new_cloned<T, const N: usize>(initial: &T) -> Box<[T; N]>
 where
     T: Clone,
 {
-    // FIXME: This can be made better once the `maybe_uninit_fill` feature
-    // gets merged. https://github.com/rust-lang/rust/issues/117428
-
-    let mut array = uninit();
-    let mut guard = Guard::new(&mut array);
+    // A direct loop avoids closure adapter calls in debug builds.
+    let mut guard = Guard::new();
     for _ in 0..N {
-        unsafe { guard.push_unchecked(initial.clone()) };
+        guard.push(initial.clone());
     }
-    unsafe { guard.finalize() };
-
-    unsafe { array.assume_init() }
+    guard.finish()
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -123,14 +118,11 @@ pub fn new_default<T, const N: usize>() -> Box<[T; N]>
 where
     T: Default,
 {
-    let mut array = uninit();
-    let mut guard = Guard::new(&mut array);
+    let mut guard = Guard::new();
     for _ in 0..N {
-        unsafe { guard.push_unchecked(T::default()) };
+        guard.push(T::default());
     }
-    unsafe { guard.finalize() };
-
-    unsafe { array.assume_init() }
+    guard.finish()
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -151,14 +143,11 @@ pub fn from_fn<T, const N: usize, F>(mut f: F) -> Box<[T; N]>
 where
     F: FnMut(usize) -> T,
 {
-    let mut array = uninit();
-    let mut guard = Guard::new(&mut array);
+    let mut guard = Guard::new();
     for i in 0..N {
-        unsafe { guard.push_unchecked(f(i)) };
+        guard.push(f(i));
     }
-    unsafe { guard.finalize() };
-
-    unsafe { array.assume_init() }
+    guard.finish()
 }
 
 /// Allocates `[T; N]` directly on the heap and initializes its entries to
@@ -180,18 +169,11 @@ pub fn try_from_fn<T, E, const N: usize, F>(mut f: F) -> Result<Box<[T; N]>, E>
 where
     F: FnMut(usize) -> Result<T, E>,
 {
-    // FIXME: This can be made better once the `Try` trait becomes stable.
-    // https://github.com/rust-lang/rust/issues/84277
-
-    let mut array = uninit();
-    let mut guard = Guard::new(&mut array);
+    let mut guard = Guard::new();
     for i in 0..N {
-        let v = f(i)?;
-        unsafe { guard.push_unchecked(v) };
+        guard.push(f(i)?);
     }
-    unsafe { guard.finalize() };
-
-    unsafe { Ok(array.assume_init()) }
+    Ok(guard.finish())
 }
 
 /// Allocates `[T; N]` directly on the heap and leaves its entries

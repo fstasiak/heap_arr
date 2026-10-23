@@ -1,41 +1,38 @@
-use core::mem::{self, MaybeUninit};
+use alloc::boxed::Box;
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr;
 
-extern crate alloc;
+use crate::BoxExt;
 
-pub struct Guard<'a, T, const N: usize> {
-    array: &'a mut [MaybeUninit<T>; N],
+pub struct Guard<T, const N: usize> {
+    array: Box<[MaybeUninit<T>; N]>,
     initialized: usize,
 }
 
-impl<'a, T, const N: usize> Guard<'a, T, N> {
-    pub fn new(array: &'a mut [MaybeUninit<T>; N]) -> Self {
+impl<T, const N: usize> Guard<T, N> {
+    pub fn new() -> Self {
         Self {
-            array,
+            array: crate::uninit(),
             initialized: 0,
         }
     }
 
-    /// # Safety
-    /// The caller must ensure not to call this method more than `N` times
-    pub unsafe fn push_unchecked(&mut self, value: T) {
-        debug_assert!(self.initialized < N);
-
-        unsafe { self.array.get_unchecked_mut(self.initialized).write(value) };
+    pub fn push(&mut self, value: T) {
+        self.array[self.initialized].write(value);
         self.initialized += 1;
     }
 
-    /// # Safety
-    /// The caller must ensure that `self.initialized == N`, so that
-    /// the [`Self::push_unchecked`] method has been called exactly `N` times
-    pub unsafe fn finalize(self) {
-        debug_assert_eq!(self.initialized, N);
+    pub fn finish(self) -> Box<[T; N]> {
+        assert_eq!(self.initialized, N);
+        let guard = ManuallyDrop::new(self);
 
-        mem::forget(self);
+        // SAFETY: All entries are initialized. ManuallyDrop prevents cleanup,
+        // so reading the Box transfers sole ownership to the initialized result.
+        unsafe { ptr::read(&raw const guard.array).assume_init() }
     }
 }
 
-impl<T, const N: usize> Drop for Guard<'_, T, N> {
+impl<T, const N: usize> Drop for Guard<T, N> {
     fn drop(&mut self) {
         let initialized =
             ptr::slice_from_raw_parts_mut(self.array.as_mut_ptr().cast::<T>(), self.initialized);
@@ -51,7 +48,6 @@ mod tests {
     extern crate std;
 
     use super::Guard;
-    use crate::box_ext::BoxExt;
     use alloc::rc::Rc;
     use core::cell::Cell;
     use core::sync::atomic::{AtomicUsize, Ordering};
@@ -59,27 +55,51 @@ mod tests {
 
     #[test]
     fn init_tracking() {
-        let mut array = crate::uninit::<u32, 5>();
-        let mut guard = Guard::new(&mut array);
+        let mut guard = Guard::<u32, 5>::new();
 
         assert_eq!(0, guard.initialized);
-        unsafe { guard.push_unchecked(10) };
+        guard.push(10);
         assert_eq!(1, guard.initialized);
     }
 
     #[test]
     fn full_init() {
-        let mut array = crate::uninit::<u32, 3>();
-        let mut guard = Guard::new(&mut array);
+        let mut guard = Guard::<u32, 3>::new();
+        guard.push(1);
+        guard.push(2);
+        guard.push(3);
 
-        unsafe {
-            guard.push_unchecked(1);
-            guard.push_unchecked(2);
-            guard.push_unchecked(3);
-            guard.finalize();
-        }
+        assert_eq!(*guard.finish(), [1, 2, 3]);
+    }
 
-        assert_eq!(*unsafe { array.assume_init() }, [1, 2, 3]);
+    #[test]
+    fn incomplete_finish_cleans_up() {
+        let resource = Rc::new(());
+        let result = catch_unwind(|| {
+            let mut guard = Guard::<Rc<()>, 3>::new();
+            guard.push(Rc::clone(&resource));
+            guard.push(Rc::clone(&resource));
+            let _ = guard.finish();
+        });
+
+        assert!(result.is_err());
+        assert_eq!(Rc::strong_count(&resource), 1);
+    }
+
+    #[test]
+    fn push_past_capacity_preserves_initialized_values() {
+        let resource = Rc::new(());
+        let mut guard = Guard::<Rc<()>, 1>::new();
+        guard.push(Rc::clone(&resource));
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            guard.push(Rc::clone(&resource));
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(Rc::strong_count(&resource), 2);
+        drop(guard.finish());
+        assert_eq!(Rc::strong_count(&resource), 1);
     }
 
     #[test]
@@ -96,13 +116,9 @@ mod tests {
 
         static DROPS: AtomicUsize = AtomicUsize::new(0);
         {
-            let mut array = crate::uninit::<DropCounter, 5>();
-            let mut guard = Guard::new(&mut array);
-
-            unsafe {
-                guard.push_unchecked(DropCounter { counter: &DROPS });
-                guard.push_unchecked(DropCounter { counter: &DROPS });
-            }
+            let mut guard = Guard::<DropCounter, 5>::new();
+            guard.push(DropCounter { counter: &DROPS });
+            guard.push(DropCounter { counter: &DROPS });
             // Guard drops here, should clean up 2 elements
         }
 
