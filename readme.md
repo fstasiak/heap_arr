@@ -11,8 +11,8 @@ handle this in optimized builds, but not in debug.
 ## The Solution
 
 ```rust
-// Instead of this:
-let arr = Box::new([0_u8; 1_000_000_000]); // Stack overflow in debug
+// This can overflow the stack in debug:
+// let arr = Box::new([0_u8; 1_000_000_000]);
 
 // Use this:
 let arr: Box<[u8; 1_000_000_000]> = heap_arr::new_copied(&0_u8); // Allocates directly on heap

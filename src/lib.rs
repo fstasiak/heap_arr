@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! const SIZE: usize = 1_000_000_000;
 //! // This would overflow the stack in debug mode:
 //! // let arr = Box::new([0u8; SIZE]);
@@ -217,29 +217,95 @@ pub fn uninit<T, const N: usize>() -> Box<[MaybeUninit<T>; N]> {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
+    use alloc::string::String;
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
-    #[cfg(miri)]
-    fn new_cloned() {
+    fn new_copied() {
         const LEN: usize = 1024;
-
-        let arr = super::new_cloned::<Option<bool>, LEN>(&Some(true));
-        assert_eq!(arr.len(), LEN);
-        assert_eq!(arr[LEN - 1], Some(true));
-    }
-
-    #[test]
-    #[cfg(not(miri))]
-    fn new_cloned() {
-        // If we weren't allocating directly on the heap, this would cause
-        // a stack overflow
-
-        const LEN: usize = 1024 * 1024 * 1024; // 1Gi
 
         let arr = super::new_copied::<Option<bool>, LEN>(&Some(true));
         assert_eq!(arr.len(), LEN);
-        assert_eq!(arr[LEN - 1], Some(true));
+        assert!(arr.iter().all(|value| *value == Some(true)));
+    }
+
+    #[test]
+    fn new_cloned() {
+        const LEN: usize = 16;
+
+        let arr = super::new_cloned::<String, LEN>(&String::from("value"));
+        assert_eq!(arr.len(), LEN);
+        assert!(arr.iter().all(|value| value == "value"));
+    }
+
+    // Miri does not enforce native stack limits.
+    #[cfg(not(miri))]
+    mod small_stack {
+        use super::std::thread;
+        use core::hint::black_box;
+
+        // The array exceeds the thread's stack; stack allocation overflows in debug.
+        const LEN: usize = 1024 * 1024;
+
+        fn run(name: &str, f: impl FnOnce() + Send + 'static) {
+            thread::Builder::new()
+                .name(name.into())
+                .stack_size(64 * 1024)
+                .spawn(f)
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+
+        #[test]
+        fn new_copied() {
+            run("new_copied", || {
+                let arr = black_box(crate::new_copied::<u8, LEN>(&7));
+                assert_eq!(arr[LEN - 1], 7);
+            });
+        }
+
+        #[test]
+        fn new_cloned() {
+            run("new_cloned", || {
+                let arr = black_box(crate::new_cloned::<u8, LEN>(&7));
+                assert_eq!(arr[LEN - 1], 7);
+            });
+        }
+
+        #[test]
+        fn new_default() {
+            run("new_default", || {
+                let arr = black_box(crate::new_default::<u8, LEN>());
+                assert_eq!(arr[LEN - 1], 0);
+            });
+        }
+
+        #[test]
+        fn from_fn() {
+            run("from_fn", || {
+                let arr = black_box(crate::from_fn::<u8, LEN, _>(|_| 7));
+                assert_eq!(arr[LEN - 1], 7);
+            });
+        }
+
+        #[test]
+        fn try_from_fn() {
+            run("try_from_fn", || {
+                let arr = black_box(crate::try_from_fn::<u8, (), LEN, _>(|_| Ok(7)).unwrap());
+                assert_eq!(arr[LEN - 1], 7);
+            });
+        }
+
+        #[test]
+        fn uninit() {
+            run("uninit", || {
+                let arr = black_box(crate::uninit::<u8, LEN>());
+                assert_eq!(arr.len(), LEN);
+            });
+        }
     }
 
     #[test]
@@ -283,8 +349,9 @@ mod tests {
 
     #[test]
     fn uninit() {
-        const LEN: usize = 1024 * 1024 * 1024; // 1Gi
+        const LEN: usize = 1024;
         let arr = super::uninit::<u64, LEN>();
+        assert_eq!(arr.len(), LEN);
         core::hint::black_box(arr);
     }
 }
