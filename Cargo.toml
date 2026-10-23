@@ -2,8 +2,9 @@
 name = "heap_arr"
 version = "0.4.0"
 edition = "2021"
+rust-version = "1.82"
 license = "MIT"
-description = "Allocate fixed-size arrays directly on the heap, bypassing stack allocation limits"
+description = "Allocate fixed-size arrays directly on the heap with no_std support"
 repository = "https://github.com/fstasiak/heap_arr.git"
 keywords = ["heap", "array", "no_std"]
 categories = ["no-std"]

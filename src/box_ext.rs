@@ -1,14 +1,12 @@
-use core::mem::{self, MaybeUninit};
-
 use alloc::boxed::Box;
+use core::mem::{self, MaybeUninit};
 
 /// Extension methods for boxed arrays of [`MaybeUninit`] elements.
 pub trait BoxExt<T, const N: usize>: Sized {
     /// Converts `Box<[MaybeUninit<T>; N]>` into `Box<[T; N]>` without reallocating.
     ///
     /// # Safety
-    /// The caller must ensure that all entries of the input array are
-    /// initialized.
+    /// Every element must contain a valid, initialized `T`.
     ///
     /// # Examples
     /// ```

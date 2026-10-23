@@ -6,6 +6,7 @@ use crate::BoxExt;
 
 pub struct Guard<T, const N: usize> {
     array: Box<[MaybeUninit<T>; N]>,
+    // Exactly the prefix 0..initialized is initialized, and initialized <= N.
     initialized: usize,
 }
 
